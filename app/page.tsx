@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -7,12 +9,20 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Clock, Calendar, Globe, Timer } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Upload, Download, FileText } from "lucide-react"
+import { CSVTimestampProcessor } from "@/lib/csv-processor"
+import { JSONTest } from "@/components/json-test"
 
 export default function TimestampConverter() {
   const [timestamp, setTimestamp] = useState("")
   const [currentTime, setCurrentTime] = useState(new Date())
   const [convertedTime, setConvertedTime] = useState<Date | null>(null)
   const [error, setError] = useState("")
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [processedData, setProcessedData] = useState<string | null>(null)
+  const [fileName, setFileName] = useState("")
 
   // Update current time every second
   useEffect(() => {
@@ -87,6 +97,63 @@ export default function TimestampConverter() {
 
     const diffInDays = Math.floor(diffInHours / 24)
     return `${Math.abs(diffInDays)} days ${diffInDays > 0 ? "ago" : "from now"}`
+  }
+
+  const processCSVFile = async (file: File) => {
+    setIsProcessing(true)
+    setError("")
+
+    try {
+      console.log("Processing file:", file.name, "Size:", file.size)
+
+      // Read first few lines for debugging
+      const text = await file.text()
+      const lines = text.split("\n")
+      console.log("First 3 lines of CSV:")
+      lines.slice(0, 3).forEach((line, i) => {
+        console.log(`Line ${i}:`, line.substring(0, 200))
+      })
+
+      const processor = new CSVTimestampProcessor()
+      const processedCSV = await processor.processCSV(file)
+
+      console.log("Processing completed successfully")
+      console.log("Output preview:", processedCSV.substring(0, 500))
+
+      setProcessedData(processedCSV)
+      setFileName(`converted_${file.name}`)
+    } catch (error) {
+      console.error("Error processing file:", error)
+      setError(`Error processing file: ${error instanceof Error ? error.message : "Unknown error"}`)
+      setProcessedData(null)
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file && file.type === "text/csv") {
+      setUploadedFile(file)
+      setError("")
+      processCSVFile(file)
+    } else {
+      setError("Please upload a valid CSV file")
+    }
+  }
+
+  const downloadProcessedFile = () => {
+    if (processedData) {
+      const blob = new Blob([processedData], { type: "text/csv" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    }
   }
 
   const getCurrentTimestamp = () => {
@@ -217,6 +284,71 @@ export default function TimestampConverter() {
             )}
           </CardContent>
         </Card>
+
+        {/* File Upload Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              Batch Convert CSV File
+            </CardTitle>
+            <CardDescription>
+              Upload a CSV file to convert all timestamp columns to human-readable format
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="csv-upload">Upload CSV File</Label>
+              <Input id="csv-upload" type="file" accept=".csv" onChange={handleFileUpload} disabled={isProcessing} />
+            </div>
+
+            {uploadedFile && (
+              <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-md border border-blue-200">
+                <FileText className="h-4 w-4 text-blue-600" />
+                <span className="text-sm font-medium">{uploadedFile.name}</span>
+                <Badge variant="secondary">{(uploadedFile.size / 1024).toFixed(1)} KB</Badge>
+              </div>
+            )}
+
+            {isProcessing && (
+              <div className="flex items-center gap-2 p-3 bg-yellow-50 rounded-md border border-yellow-200">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-600"></div>
+                <span className="text-sm">Processing file...</span>
+              </div>
+            )}
+
+            {processedData && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 p-3 bg-green-50 rounded-md border border-green-200">
+                  <div className="h-2 w-2 bg-green-500 rounded-full"></div>
+                  <span className="text-sm font-medium">File processed successfully!</span>
+                </div>
+
+                <Button onClick={downloadProcessedFile} className="w-full">
+                  <Download className="h-4 w-4 mr-2" />
+                  Download Converted File
+                </Button>
+
+                <div className="text-xs text-gray-600 p-3 bg-gray-50 rounded space-y-2">
+                  <div>
+                    <strong>What was converted:</strong>
+                  </div>
+                  <ul className="list-disc list-inside space-y-1 ml-2">
+                    <li>Simple timestamp columns (createdAt, updatedAt) → Added readable date columns</li>
+                    <li>JSON timestamp fields → Expanded with original + converted + readable formats</li>
+                    <li>Nested timestamps in trackingHistory → Processed recursively</li>
+                  </ul>
+                  <div className="mt-2">
+                    <strong>Example conversion:</strong> 1752210112744 → 2025-07-11T05:41:52.744Z
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* JSON Test Component */}
+        <JSONTest />
 
         {/* Quick Examples */}
         <Card>

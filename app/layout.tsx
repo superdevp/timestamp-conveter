@@ -3,7 +3,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Timestamp Converter',
-  description: 'Created with Next.js',
+  description: 'Made by Super Dev',
   generator: 'Super Dev',
 }
 
